@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// lx: TestChrome155MLDSAHandshake is dropped: the fork has no ML-DSA
+// handshake support (signature scheme codepoints only, no crypto/mldsa
+// before Go 1.27). TestChrome155PresetOwnership is dropped too: it relies on
+// ClientHelloSpec.clone and the cloning ApplyPreset from upstream 98f1bbc,
+// which the fork does not carry.
+
 package tls
 
 import (
 	"bytes"
-	"crypto/fips140"
-	"crypto/mldsa"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -270,94 +274,6 @@ func chrome155TrustAnchors(t *testing.T, extensions []TLSExtension) *TrustAnchor
 	}
 	t.Fatal("missing typed trust_anchors extension")
 	return nil
-}
-
-func TestChrome155PresetOwnership(t *testing.T) {
-	spec, err := UTLSIdToSpec(HelloChrome_155)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := spec.clone()
-	first := chrome155Build(t, HelloCustom, "example.com", &spec)
-	second := chrome155Build(t, HelloCustom, "example.com", &spec)
-	if !reflect.DeepEqual(&spec, before) {
-		t.Fatal("ApplyPreset mutated the reusable Chrome 155 preset")
-	}
-	anchors := chrome155TrustAnchors(t, first.Extensions)
-	if len(anchors.TrustAnchorIDs) == 0 || len(anchors.TrustAnchorIDs[0]) == 0 {
-		t.Fatal("Chrome 155 capture must contain trust anchor IDs")
-	}
-	anchors.TrustAnchorIDs[0][0] ^= 0xff
-	for _, extension := range first.Extensions {
-		switch extension := extension.(type) {
-		case *SignatureAlgorithmsExtension:
-			extension.SupportedSignatureAlgorithms[0] = PKCS1WithSHA1
-		case *SupportedCurvesExtension:
-			extension.Curves[0] = CurveP384
-		}
-	}
-	first.HandshakeState.Hello.CipherSuites[0] = TLS_RSA_WITH_AES_256_CBC_SHA
-	if !reflect.DeepEqual(&spec, before) {
-		t.Fatal("connection mutations leaked into the reusable Chrome 155 preset")
-	}
-	wantAnchors := chrome155TrustAnchors(t, before.Extensions).TrustAnchorIDs
-	if !reflect.DeepEqual(chrome155TrustAnchors(t, second.Extensions).TrustAnchorIDs, wantAnchors) {
-		t.Fatal("nested trust anchor mutations leaked between connections")
-	}
-	later, err := UTLSIdToSpec(HelloChrome_155)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(chrome155TrustAnchors(t, later.Extensions).TrustAnchorIDs, wantAnchors) {
-		t.Fatal("trust anchor mutations leaked into future preset instances")
-	}
-}
-
-func TestChrome155MLDSAHandshake(t *testing.T) {
-	if fips140.Version() == "v1.0.0" {
-		t.Skip("ML-DSA is unavailable in FIPS 140-3 module v1.0.0")
-	}
-	for _, tc := range []struct {
-		scheme SignatureScheme
-		cert   Certificate
-	}{
-		{MLDSA44, testMLDSA44Cert},
-		{MLDSA65, testMLDSA65Cert},
-		{MLDSA87, testMLDSA87Cert},
-	} {
-		t.Run(tc.scheme.String(), func(t *testing.T) {
-			clientConfig := testConfigClient.Clone()
-			clientConfig.ClientSessionCache = nil
-			serverConfig := testConfigServer.Clone()
-			serverConfig.MinVersion, serverConfig.MaxVersion = VersionTLS13, VersionTLS13
-			serverConfig.Certificates = []Certificate{tc.cert}
-			serverConfig.SessionTicketsDisabled = true
-			clientConn, serverConn := localPipe(t)
-			client, server := UClient(clientConn, clientConfig, HelloChrome_155), Server(serverConn, serverConfig)
-			clientResult := make(chan error, 1)
-			go func() { clientResult <- client.Handshake() }()
-			serverErr := server.Handshake()
-			if serverErr != nil {
-				serverConn.Close()
-			}
-			clientErr := <-clientResult
-			if clientErr != nil || serverErr != nil {
-				t.Fatalf("Chrome 155 ML-DSA handshake: client=%v, server=%v", clientErr, serverErr)
-			}
-			for _, state := range []ConnectionState{client.ConnectionState(), server.ConnectionState()} {
-				if !state.HandshakeComplete || state.Version != VersionTLS13 || state.DidResume {
-					t.Fatalf("expected a fresh full TLS 1.3 handshake: %+v", state)
-				}
-			}
-			peer := client.ConnectionState().PeerCertificates
-			if len(peer) == 0 {
-				t.Fatal("missing verified server certificate")
-			}
-			if _, ok := peer[0].PublicKey.(*mldsa.PublicKey); !ok {
-				t.Fatalf("server public key = %T, want *mldsa.PublicKey", peer[0].PublicKey)
-			}
-		})
-	}
 }
 
 func TestChrome155SignatureGREASESeed(t *testing.T) {
