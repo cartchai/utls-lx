@@ -255,7 +255,8 @@ will prepare ClientHello with empty uconn.Extensions so you can fill it with TLS
 	* `utls.HelloFirefox_Auto` - parrots recommended(usually latest) Firefox version
 	* `utls.HelloFirefox_55` - parrots Firefox 55
 
-`HelloChrome_Auto` currently selects `HelloChrome_155`. This profile includes
+In this fork `HelloChrome_Auto` stays at `HelloChrome_133`; `HelloChrome_155` is
+opt-in and must be selected explicitly. This profile includes
 GREASE and ML-DSA signature schemes and the 28 trust anchor IDs observed in a
 [fresh Chrome capture](testdata/chrome155_clienthello.md). The IDs are a snapshot
 of that build's Chrome Root Store; component updates and browser feature settings

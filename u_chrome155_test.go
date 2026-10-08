@@ -232,8 +232,9 @@ func chrome155CompareWire(t *testing.T, want, got chrome155WireHello) {
 }
 
 func TestChrome155CapturedClientHello(t *testing.T) {
-	if HelloChrome_Auto != HelloChrome_155 {
-		t.Fatalf("HelloChrome_Auto = %s, want %s", HelloChrome_Auto.Str(), HelloChrome_155.Str())
+	// lx: HelloChrome_Auto stays at Chrome 133 in this fork; Chrome 155 is opt-in.
+	if HelloChrome_155 != (ClientHelloID{helloChrome, "155", nil, nil}) {
+		t.Fatalf("HelloChrome_155 = %s, want Chrome-155", HelloChrome_155.Str())
 	}
 	want, _, captured := chrome155ParseWire(t, chrome155Fixture(t))
 	client := chrome155Build(t, HelloChrome_155, chrome155FixtureServerName(t, captured), nil)
